@@ -37,7 +37,7 @@ namespace LEGO.AsyncAPI.Json
 
         /// <summary>
         /// Attempts to cast a <see cref="JsonNode"/> into another <see cref="JsonNode"/> type. This is used
-        /// to leverage the already defined exceptions impelemented in the base library.
+        /// to leverage the already defined exceptions implemented in the base library.
         /// </summary>
         /// <typeparam name="T">The type to convert to.</typeparam>
         /// <param name="node">The node to convert.</param>
@@ -45,21 +45,57 @@ namespace LEGO.AsyncAPI.Json
         /// <exception cref="InvalidOperationException">The node is not the correct type.</exception>
         public static T As<T>(this JsonNode node)
             where T : JsonNode
+            => (T)As(node, typeof(T));
+
+        /// <summary>
+        /// Attempts to cast a <see cref="JsonNode"/> into another <see cref="JsonNode"/> type. This is used
+        /// to leverage the already defined exceptions implemented in the base library.
+        /// </summary>
+        /// <param name="node">The node to convert.</param>
+        /// <param name="type">The type of node to convert it too.</param>
+        /// <returns>The converted noe.</returns>
+        /// <exception cref="InvalidOperationException">The node is not the correct type.</exception>
+        public static JsonNode As(this JsonNode? node, Type type)
         {
+            if (node == null)
+            {
+                throw new ArgumentNullException(nameof(node));
+            }
+
+            if (type == null)
+            {
+                throw new ArgumentNullException(nameof(type));
+            }
+
+            if (!typeof(JsonNode).IsAssignableFrom(type))
+            {
+                throw new ArgumentException($"Only types that are of {nameof(JsonNode)} can be used. The type provided was {type.Name}");
+            }
+
             JsonNode result;
-            Type type = typeof(T);
 
-            result = type == typeof(JsonNode)
-                ? node
-                : type == typeof(JsonObject)
-                    ? node.AsObject()
-                    : type == typeof(JsonValue)
-                                    ? node.AsValue()
-                                    : type == typeof(JsonArray)
-                                                    ? (JsonNode)node.AsArray()
-                                                    : throw new NotImplementedException($"No cast defined for converting {nameof(JsonNode)} into a '{type.FullName}'");
+            if (typeof(JsonNode) == type)
+            {
+                result = node;
+            }
+            else if (typeof(JsonObject) == type)
+            {
+                result = node.AsObject();
+            }
+            else if (typeof(JsonArray) == type)
+            {
+                result = node.AsArray();
+            }
+            else if (typeof(JsonValue) == type)
+            {
+                result = node.AsValue();
+            }
+            else
+            {
+                throw new NotImplementedException($"No cast defined for converting {nameof(JsonNode)} into a '{type.FullName}'");
+            }
 
-            return (T)result;
+            return result;
         }
     }
 }

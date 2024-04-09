@@ -1,9 +1,13 @@
 ﻿// Copyright (c) The LEGO Group. All rights reserved.
+#nullable enable
 
 namespace LEGO.AsyncAPI.Json
 {
     using System;
+    using System.Collections.Generic;
     using System.ComponentModel;
+    using System.Linq;
+    using System.Reflection;
     using System.Text.Json;
     using System.Text.Json.Nodes;
 
@@ -13,39 +17,57 @@ namespace LEGO.AsyncAPI.Json
     internal static class JsonValueExtensions
     {
         /// <summary>
+        /// Contains the Method info for <see cref="JsonValue"/>.GetValue.
+        /// </summary>
+        internal static readonly MethodInfo JsonGetValueMethod;
+        private static Dictionary<Type, MethodInfo> methodCache;
+
+        static JsonValueExtensions()
+        {
+            JsonGetValueMethod = typeof(JsonValue)
+                .GetMethod(nameof(JsonValue.GetValue))!;
+            methodCache = new Dictionary<Type, MethodInfo>();
+        }
+
+        /// <summary>
         /// Attempts to get the value from a json node but supports converting it if possible.
         /// </summary>
         /// <typeparam name="T">The kind to get it.</typeparam>
         /// <param name="jsonValue">The value to convert.</param>
         /// <returns>The result.</returns>
-        public static T GetValue<T>(this JsonValue jsonValue)
+        public static T? GetValue<T>(this JsonValue jsonValue)
         {
-            JsonValueKind kind = jsonValue.GetValueKind();
-
-            switch (kind)
+            if (jsonValue == null)
             {
-                case JsonValueKind.Null:
-                    return default;
-                case JsonValueKind.True:
-                    return (T)(object)true;
-                case JsonValueKind.False:
-                    return (T)(object)false;
-                case JsonValueKind.String:
-                    if (typeof(T) == typeof(string))
-                    {
-                        return (T)(object)jsonValue.GetValue<string>();
-                    }
-
-                    TypeConverter typeConverter = TypeDescriptor.GetConverter(typeof(T));
-                    if (typeConverter.CanConvertFrom(typeof(string)))
-                    {
-                        return (T)typeConverter.ConvertFrom(jsonValue.GetValue<string>());
-                    }
-
-                    throw new InvalidCastException($"Unable to convert from string to {typeof(T).Name} as no converter has been defined.");
-                default:
-                    throw new NotImplementedException($"No converter implemented for {kind} to {typeof(T).FullName}");
+                throw new ArgumentNullException(nameof(jsonValue));
             }
+
+            Type targetType = typeof(T);
+            Type jsonType = jsonValue.GetType();
+            Type? valueType = jsonType
+                .GetGenericArguments()
+                .FirstOrDefault();
+
+            if (valueType == null)
+            {
+                throw new ArgumentException($"Unexpected type {jsonType.FullName}");
+            }
+
+            if (!methodCache.TryGetValue(valueType, out MethodInfo? getValueMethod))
+            {
+                getValueMethod = JsonGetValueMethod.MakeGenericMethod(valueType);
+                methodCache[valueType] = getValueMethod;
+            }
+
+            object? rawValue = getValueMethod.Invoke(jsonValue, null);
+
+            TypeConverter typeConverter = TypeDescriptor.GetConverter(targetType);
+            if (typeConverter.CanConvertFrom(valueType))
+            {
+                return (T)typeConverter.ConvertFrom(rawValue!)!;
+            }
+
+            return default!;
         }
     }
 }

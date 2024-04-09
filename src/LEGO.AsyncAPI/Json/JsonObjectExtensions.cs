@@ -5,6 +5,8 @@ namespace LEGO.AsyncAPI.Json
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics.CodeAnalysis;
+    using System.Dynamic;
     using System.Text.Json.Nodes;
     using LEGO.AsyncAPI.Serialization;
 
@@ -53,6 +55,43 @@ namespace LEGO.AsyncAPI.Json
                     yield return new JsonProperty<T>(member.Key, asType);
                 }
             }
+        }
+
+        /// <summary>
+        /// Tries to get a property from the object with the given name. If it does not exist false is returned.
+        /// </summary>
+        /// <param name="source">The source to grab the property from.</param>
+        /// <param name="propertyName">The name of the property to find.</param>
+        /// <param name="result">The property if it's found otherwise null.</param>
+        /// <returns>True if it's found otherwise false.</returns>
+        public static bool TryGetProperty(this JsonObject source, string propertyName, [NotNullWhen(true)] out JsonProperty? result)
+        {
+            bool returnValue = TryGetProperty(source, propertyName, out JsonProperty<JsonNode>? outProperty);
+            result = outProperty;
+            return returnValue;
+        }
+
+        /// <summary>
+        /// Tries to get a property from the object with the given name. If it does not exist false is returned.
+        /// </summary>
+        /// <typeparam name="T">The type of node you want.</typeparam>
+        /// <param name="source">The source to grab the property from.</param>
+        /// <param name="propertyName">The name of the property to find.</param>
+        /// <param name="result">The property if it's found otherwise null.</param>
+        /// <returns>True if it's found otherwise false.</returns>
+        public static bool TryGetProperty<T>(this JsonObject source, string propertyName, [NotNullWhen(true)] out JsonProperty<T>? result)
+            where T : JsonNode
+        {
+            result = null;
+            T? nodeValue = source[propertyName] as T;
+
+            if (nodeValue != null)
+            {
+                result = new JsonProperty<T>(propertyName, nodeValue);
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -130,7 +169,7 @@ namespace LEGO.AsyncAPI.Json
         /// Creates a deep clone of another <see cref="JsonObject"/> but excludes the given properties.
         /// </summary>
         /// <param name="source">The source to copy from.</param>
-        /// <param name="excluding">The member names to exclude.</param>
+        /// <param name="exclude">The member names to exclude.</param>
         /// <returns>The deep cloned object.</returns>
         public static JsonObject Copy(this JsonObject source, params string[] exclude)
         {
@@ -167,18 +206,18 @@ namespace LEGO.AsyncAPI.Json
         /// </summary>
         /// <param name="source">The source to clone</param>
         /// <returns>The new copy.</returns>
-        public static new JsonObject DeepClone(this JsonObject source)
+        public static JsonObject DeepClone(this JsonObject source)
             => (JsonObject)source.DeepClone();
 
         /// <summary>
-        /// Attempts to get a property value based on it's name and casts the node.
+        /// Attempts to get a outProperty value based on it's name and casts the node.
         /// </summary>
-        /// <typeparam name="T">The type of property value.</typeparam>
-        /// <param name="target">The object to try to get the property from.</param>
-        /// <param name="propertyName">The name of the property.</param>
+        /// <typeparam name="T">The type of outProperty value.</typeparam>
+        /// <param name="target">The object to try to get the outProperty from.</param>
+        /// <param name="propertyName">The name of the outProperty.</param>
         /// <param name="value">The value casted as the correct type.</param>
         /// <returns>True if thevalue could be found and casted otherwise false.</returns>
-        public static bool TryGetPropertyValue<T>(this JsonObject? target, string? propertyName, out T? value)
+        public static bool TryGetPropertyValue<T>(this JsonObject? target, string? propertyName, [NotNullWhen(true)] out T? value)
         {
             value = default;
 
@@ -192,11 +231,29 @@ namespace LEGO.AsyncAPI.Json
                 return false;
             }
 
+            Type type = typeof(T);
             value = default;
             if (target.TryGetPropertyValue(propertyName, out JsonNode? jsonNode))
             {
-                value = jsonNode!.GetValue<T>();
-                return true;
+                if (typeof(JsonNode).IsAssignableFrom(type))
+                {
+                    value = (T)(object)jsonNode.As(type);
+                    return true;
+                }
+
+                if (type == typeof(JsonObject))
+                {
+                    value = (T)(object)jsonNode!.AsObject();
+                    return true;
+                }
+
+                if (jsonNode is JsonValue jsonValue)
+                {
+                    value = jsonValue!.GetValue<T>();
+                    return value != null;
+                }
+
+                throw new InvalidOperationException($"The node {jsonNode!.GetPath()} is not of type JsonValue it's {jsonNode.GetType().Name} ");
             }
 
             return false;

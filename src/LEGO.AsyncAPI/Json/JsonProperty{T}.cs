@@ -28,5 +28,12 @@ namespace LEGO.AsyncAPI.Json
         /// The value of the property.
         /// </summary>
         public new T Value => (T)base.Value!;
+
+        /// <summary>
+        /// Clones the properties value.
+        /// </summary>
+        /// <returns>The new copy.</returns>
+        public new T DeepCloneValue()
+            => (T)this.Value.DeepClone();
     }
 }

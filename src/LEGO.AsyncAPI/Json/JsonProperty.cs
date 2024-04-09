@@ -37,7 +37,14 @@ namespace LEGO.AsyncAPI.Json
         /// <param name="target">The target to add the property to.</param>
         public void AssignTo(JsonObject target)
         {
-            target[this.Name] = this.Value;
+            target[this.Name] = this.Value.DeepClone();
         }
+
+        /// <summary>
+        /// Clones the properties value.
+        /// </summary>
+        /// <returns>The new copy.</returns>
+        public JsonNode DeepCloneValue()
+            => this.Value.DeepClone();
     }
 }

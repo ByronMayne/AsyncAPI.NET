@@ -7,7 +7,13 @@ namespace LEGO.AsyncAPI.Tests
     using System.IO;
     using System.Linq;
     using System.Runtime.CompilerServices;
+    using System.Text;
+    using System.Text.Json;
+    using System.Text.Json.Nodes;
+    using FluentAssertions.Formatting;
+    using LEGO.AsyncAPI.Readers;
     using NUnit.Framework;
+    using YamlDotNet.RepresentationModel;
 
     /// <summary>
     /// Base class for unit tests across the project. Can contain
@@ -21,7 +27,13 @@ namespace LEGO.AsyncAPI.Tests
         protected TestBase()
         {
             this.TestContext = TestContext.CurrentContext;
+            this.TestDataDirectory = Path.Combine(Environment.CurrentDirectory, "TestData");
         }
+
+        /// <summary>
+        /// Gets the directory where we save test data.
+        /// </summary>
+        protected string TestDataDirectory { get; }
 
         /// <summary>
         /// Gets the current context of the running text.
@@ -39,6 +51,7 @@ namespace LEGO.AsyncAPI.Tests
             TestContext.WriteLine(message);
         }
 
+
         /// <summary>
         /// Attempts to find the first file that matches the name of the active unit test
         /// and returns it as an expected type.
@@ -48,27 +61,98 @@ namespace LEGO.AsyncAPI.Tests
         /// <returns>The result</returns>
         protected T GetTestData<T>([CallerMemberName] string resourceName = "")
         {
-            string searchPattern = string.IsNullOrWhiteSpace(Path.GetExtension(resourceName))
-                ? $"{resourceName}.*"
-                : resourceName;
+            string? absolutePath = Path.Combine(this.TestDataDirectory, resourceName);
 
-            string testDataDirectory = Path.Combine(Environment.CurrentDirectory, "TestData");
+            if (!File.Exists(absolutePath))
+            {
+                string extension = Path.GetExtension(resourceName);
 
-            string? testDataPath = Directory.GetFiles(testDataDirectory, searchPattern)
-                .FirstOrDefault();
+                if (string.IsNullOrEmpty(extension))
+                {
+                    absolutePath = Directory.GetFiles(this.TestDataDirectory, $"{resourceName}.*")
+                        .FirstOrDefault();
+                }
+            }
 
-            Assume.That(File.Exists(testDataPath), $"No test data file named '{resourceName}' exists in directory '{testDataDirectory}'");
+            if (!File.Exists(absolutePath))
+            {
+                Assume.That(false, $"Unable to find a test data file named {resourceName} in the directory '{this.TestDataDirectory}'.");
+            }
+
+            return this.LoadFromPath<T>(absolutePath);
+        }
+
+        private T LoadFromPath<T>(string absolutePath)
+        {
+            Assume.That(File.Exists(absolutePath), $"No test data file named '{absolutePath}' exists in directory '{absolutePath}'");
 
             object? result = null;
             Type resultType = typeof(T);
 
             if (typeof(string) == resultType)
             {
-                result = File.ReadAllText(testDataPath);
+                result = File.ReadAllText(absolutePath);
             }
             else if (typeof(string[]) == resultType)
             {
-                result = File.ReadAllLines(testDataPath);
+                result = File.ReadAllLines(absolutePath);
+            }
+            else if (typeof(Stream) == resultType)
+            {
+                result = File.OpenRead(absolutePath);
+            }
+            else if (typeof(StreamReader) == resultType)
+            {
+                Stream fileStream = this.LoadFromPath<Stream>(absolutePath);
+                result = new StreamReader(fileStream);
+            }
+            else if (typeof(YamlStream) == resultType)
+            {
+                StreamReader reader = this.LoadFromPath<StreamReader>(absolutePath);
+                YamlStream yamlStream = new YamlStream();
+                yamlStream.Load(reader);
+                result = yamlStream;
+            }
+            else if (typeof(byte[]) == resultType)
+            {
+                string content = this.LoadFromPath<string>(absolutePath);
+                byte[] bytes = Encoding.UTF8.GetBytes(content);
+                result = bytes;
+            }
+            else if (typeof(JsonObject) == resultType)
+            {
+                JsonNode jsonNode = this.LoadFromPath<JsonNode>(absolutePath);
+                result = jsonNode.AsObject();
+            }
+            else if (typeof(JsonArray) == resultType)
+            {
+                JsonNode jsonNode = this.LoadFromPath<JsonNode>(absolutePath);
+                result = jsonNode.AsArray();
+            }
+            else if (typeof(JsonNode) == resultType)
+            {
+                string fileExtension = Path.GetExtension(absolutePath).ToLower();
+                switch (fileExtension)
+                {
+                    case ".json":
+                    case ".jsonc":
+                        {
+                            Stream stream = this.LoadFromPath<Stream>(absolutePath);
+                            result = JsonNode.Parse(stream);
+                        }
+
+                        break;
+                    case ".yml":
+                    case ".yaml":
+                        {
+                            YamlStream yamls = this.LoadFromPath<YamlStream>(absolutePath);
+                            result = yamls.Documents.First().ToJsonNode(new AsyncApiReaderSettings());
+                        }
+
+                        break;
+                    default:
+                        throw new NotImplementedException($"Unable to convert {Path.GetFileName(absolutePath)} to {nameof(JsonNode)}");
+                }
             }
             else
             {

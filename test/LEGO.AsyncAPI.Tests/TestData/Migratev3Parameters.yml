@@ -1,0 +1,40 @@
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/asyncapi/spec-json-schemas/master/schemas/2.6.0-without-%24id.json
+asyncapi: 2.6.0
+info:
+  title: example
+  version: '1.0'
+channels: 
+  user/{user_id}/signedup:
+    parameters:
+      user_id: 
+        location: "$message.payload#/user_id"
+        description: Just a test description
+        x-parameter-property: true 
+        schema: 
+          type: string 
+          enum: ["test"]
+          default: "test" 
+          examples: ["test"]
+          x-schema-property: true 
+...
+
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/asyncapi/spec-json-schemas/master/schemas/3.0.0-without-%24id.json
+asyncapi: 3.0.0
+info:
+  title: example
+  version: '1.0'
+channels: 
+  userSignedup:
+    address: user/{user_id}/signedup
+    parameters:
+      user_id: 
+        enum: ["test"]
+        default: "test"
+        description: Just a test description
+        examples: ["test"]
+        location: "$message.payload#/user_id"
+        x-parameter-property: true 
+        x-schema-property: true 
+...

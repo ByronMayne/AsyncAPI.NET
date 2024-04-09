@@ -1,0 +1,6 @@
+﻿asyncapi: 2.6.0
+externalDocs:
+  description: Find more info here
+  url: https://www.asyncapi.com
+tags:
+  - name: e-commerce
